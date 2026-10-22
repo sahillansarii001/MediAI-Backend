@@ -14,7 +14,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs": "^2.1.0",
     "@vladmandic/face-api": "^1.7.15",
     "bcryptjs": "^3.0.3",
     "canvas": "^3.2.3",
@@ -28,7 +28,6 @@
     "mongoose": "^9.6.2",
     "multer": "^2.1.1",
     "nodemailer": "^9.0.5",
-    "nodemon": "^3.1.14",
     "openai": "^6.41.0",
     "sharp": "^0.35.2",
     "socket.io": "^4.8.3",
@@ -36,10 +35,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tahachoudhary54/MediAi_Backend.git"
+    "url": "git+https://github.com/sahillansarii001/MediAi_Backend.git"
   },
   "bugs": {
-    "url": "https://github.com/tahachoudhary54/MediAi_Backend/issues"
+    "url": "https://github.com/sahillansarii001/MediAi_Backend/issues"
   },
-  "homepage": "https://github.com/tahachoudhary54/MediAi_Backend#readme"
+  "homepage": "https://github.com/sahillansarii001/MediAi_Backend#readme",
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
 }
