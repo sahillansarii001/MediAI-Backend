@@ -3,6 +3,7 @@ import cloudinary from '../config/cloudinary.js';
 import upload from '../middleware/upload.middleware.js';
 import Notification from '../models/Notification.js';
 import { createAuditLog } from '../utils/auditLogger.js';
+import fs from 'fs';
 
 // @desc    Create a draft report (usually called by AI service at end of chat)
 // @route   POST /api/reports/draft
@@ -167,6 +168,7 @@ export const uploadFile = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'No file uploaded' });
         }
         const result = await cloudinary.uploader.upload(req.file.path, { folder: 'reports' });
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
         report.reportUploads.push(result.secure_url);
         await report.save();
         res.status(200).json({ success: true, url: result.secure_url });

@@ -595,12 +595,12 @@ export const getAnalytics = async (req, res) => {
 
 export const getPlatformSettings = async (req, res) => {
     try {
-        // For now, return static settings. In production, this would come from a Settings model.
+        const adminUser = await User.findOne({ role: { $in: ['admin', 'super_admin'] } }).select('email');
         res.status(200).json({
             success: true,
             data: {
                 platformName: 'MediAI Healthcare',
-                contactEmail: process.env.ADMIN_EMAIL || 'admin@mediai.health',
+                contactEmail: adminUser?.email || '',
                 emergencyDispatchEnabled: true,
                 maxGuestSOSPerHour: 10,
                 autoAssignEnabled: false

@@ -101,41 +101,35 @@ export const symptomCheck = async (req, res, next) => {
                 - Currently Available Doctor Specializations on Platform: ${specializationsList}
 
                 RULES:
-                1. Ask between 4 and 6 targeted follow-up questions before generating an assessment.
-                2. Do not generate an assessment after only 1-2 questions UNLESS the user explicitly asks for a diagnosis, medicine, treatment, or to consult a doctor.
-                3. Do not ask more than 6 questions unless a red-flag symptom is detected.
-                4. Keep questions short and conversational.
-                5. Each new question should depend on previous answers.
-                6. IMPORTANT: If the user explicitly asks for medicine, cream, treatment, or to consult a doctor, STOP asking questions immediately and provide your full assessment.
+                1. You MUST ask between 4 and 6 targeted follow-up questions (ONE question at a time) before generating an assessment.
+                2. NEVER generate an assessment (do not provide possibleCondition, riskLevel, or preventionAdvice) after only 1, 2, or 3 user answers unless the user explicitly commands you to diagnose immediately or red-flag emergency symptoms are present.
+                3. You MUST provide a clear, helpful single follow-up question in 'followUpQuestion' to learn more about their symptom (duration, pain scale 1-10, location, accompanying symptoms, triggers).
+                4. When asking a follow-up question, you MUST set 'isAssessmentReady' to false, set 'possibleCondition' to null, and set 'riskLevel' to null.
+                5. ONLY when you have asked at least 4 follow-up questions and collected enough clinical context, or if an urgent red-flag emergency is detected, set 'isAssessmentReady' to true, leave 'followUpQuestion' empty or provide closing remarks, and fill in 'possibleCondition', 'riskLevel', and 'preventionAdvice'.
 
-                QUESTION PRIORITY (For every symptom, gather):
+                QUESTION PRIORITY (For every symptom, gather step-by-step):
                 - Severity (mild, moderate, severe or 1-10)
-                - Duration
-                - Location of symptom
-                - Associated symptoms
-                - Relevant triggers or recent events
+                - Duration (when did it start)
+                - Location and type (throbbing, sharp, dull, one-sided)
+                - Associated symptoms (nausea, light sensitivity, fever)
+                - Triggers or recent events (stress, lack of sleep, injury)
 
                 RED FLAG SCREENING:
-                Always check for dangerous symptoms when relevant: Chest pain, Difficulty breathing, Loss of consciousness, Severe bleeding, High fever, Sudden severe headache, Severe abdominal pain, Neurological symptoms (weakness, confusion, vision changes).
-                If red flags are detected:
+                If dangerous symptoms are detected (chest pain, loss of consciousness, sudden severe worst-headache-of-life, stroke signs):
                 - Set riskLevel = High
-                - Recommend immediate medical attention (set emergencyWarning)
-                - Stop asking unnecessary questions and provide assessment immediately.
+                - Set emergencyWarning = "Immediate medical attention required."
+                - Set isAssessmentReady = true immediately.
 
                 ASSESSMENT FORMAT:
                 Risk Level:
                 - Low, Medium, High, Critical
 
                 Possible Conditions:
-                - Show 1-3 possible conditions in possibleCondition
+                - Show 1-3 possible conditions in possibleCondition (e.g. "Tension Headache, Migraine")
                 - Never claim certainty. Use phrases like "may be" or "could be"
 
                 Recommended Specialist:
-                - Select medically appropriate specialist.
-                - If the appropriate specialist is available on the platform, set recommendedSpecialization.
-                - If the specialist is unavailable on the platform, DO NOT set recommendedSpecialization. Instead, append exactly this format to your preventionAdvice:
-                  "Recommended Specialist: [Specialist]"
-                  "Available Doctor on Platform: [Available Specialization or None]"
+                - Select medically appropriate specialist from available list: ${specializationsList}
 
                 Advice:
                 - Provide safe self-care recommendations in preventionAdvice
@@ -150,17 +144,15 @@ export const symptomCheck = async (req, res, next) => {
                 - 5 Questions Answered: Medium Confidence
                 - 6 Questions Answered: Higher Confidence
 
-                IMPORTANT:
-                The user should feel that the AI is thorough but efficient. Target assessment time: 30-60 seconds. Target question count: 4-6 questions. Never present information as a definitive diagnosis. Always include a medical disclaimer.
-
                 You must return a JSON response strictly with the following fields:
-                - followUpQuestion (string - use for questions or conversational replies. Leave EMPTY when providing a full assessment.)
-                - possibleCondition (string, only when providing full assessment)
-                - riskLevel (string: Low, Medium, High, Critical — only when assessing)
-                - recommendedSpecialization (string, optional - ONLY provide this if the exactly matching specialist is present in the available list)
-                - preventionAdvice (string, only when assessing)
-                - emergencyWarning (string, optional — only for High/Critical risk situations)
-                - suggestedPrescriptions (array of objects, max 3 items. Each: name, type (must be "OTC" only), dosage, duration, notes. Always check patient allergies first.)`;
+                - followUpQuestion (string - your next question to the patient. Leave null/empty ONLY if isAssessmentReady is true)
+                - isAssessmentReady (boolean - false if still asking questions, true ONLY when ready to show final assessment)
+                - possibleCondition (string or null - only when isAssessmentReady is true)
+                - riskLevel (string or null: Low, Medium, High, Critical — only when isAssessmentReady is true)
+                - recommendedSpecialization (string, optional - only when isAssessmentReady is true)
+                - preventionAdvice (string or null - only when isAssessmentReady is true)
+                - emergencyWarning (string, optional - only for High/Critical risk situations)
+                - suggestedPrescriptions (array of objects, max 3 items - only when isAssessmentReady is true)`;
         }
 
         // Build user message — include image for vision analysis if imageUrl provided
@@ -223,6 +215,32 @@ export const symptomCheck = async (req, res, next) => {
         }
 
         const aiResponse = JSON.parse(response.choices[0].message.content);
+
+        // Safety enforcement: If user has had fewer than 4 exchanges in assessment mode,
+        // and no emergency warning is flagged, ensure we stay in questioning mode.
+        const userExchangeCount = (previousMessages || []).filter(m => m.role === 'user').length + 1;
+        const isEmergency = aiResponse.riskLevel === 'Critical' || (aiResponse.emergencyWarning && aiResponse.emergencyWarning.trim() !== '');
+
+        if (mode === 'assess' && !isEmergency && userExchangeCount < 4) {
+            // Force question mode
+            aiResponse.isAssessmentReady = false;
+            if (!aiResponse.followUpQuestion || aiResponse.followUpQuestion.trim() === '') {
+                // If model prematurely omitted question, supply an appropriate diagnostic follow-up question
+                const questions = [
+                    "How long have you been experiencing this symptom, and did it start suddenly or gradually?",
+                    "On a scale of 1 to 10, how severe is the pain or discomfort right now?",
+                    "Are you experiencing any other accompanying symptoms, such as nausea, dizziness, or fever?",
+                    "Have you noticed any specific triggers, or does anything make the symptom better or worse?"
+                ];
+                aiResponse.followUpQuestion = questions[userExchangeCount - 1] || "Could you describe what makes the symptom feel better or worse?";
+            }
+            // Strip out premature assessment fields so frontend does not show assessment card
+            delete aiResponse.possibleCondition;
+            delete aiResponse.riskLevel;
+            delete aiResponse.preventionAdvice;
+            delete aiResponse.suggestedPrescriptions;
+            delete aiResponse.recommendedSpecialization;
+        }
 
         // Create an audit log for patient activity tracking
         await createAuditLog({

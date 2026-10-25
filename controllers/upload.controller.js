@@ -17,6 +17,8 @@ export const uploadMedia = async (req, res, next) => {
     const result = await cloudinary.uploader.upload(filePath, {
       folder: 'health_app_media'
     });
+    // Remove temp local file
+    try { fs.unlinkSync(filePath); } catch (_) {}
     // Return URL
     await createAuditLog({ action: 'upload_media', req, target: 'Media Upload', details: { url: result.secure_url } });
     return res.status(201).json({ success: true, data: { url: result.secure_url } });

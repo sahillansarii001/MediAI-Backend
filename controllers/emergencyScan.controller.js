@@ -42,6 +42,7 @@ export const handleEmergencyScan = async (req, res) => {
         let buffer = req.file.buffer;
         if (!buffer && req.file.path) {
             buffer = fs.readFileSync(req.file.path);
+            try { fs.unlinkSync(req.file.path); } catch (_) {}
         }
         const inputEmbedding = await getFaceEmbedding(buffer);
 

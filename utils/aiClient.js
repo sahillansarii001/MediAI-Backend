@@ -3,25 +3,46 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const GROQ_MODELS = ['llama', 'mixtral', 'gemma', 'whisper', 'qwen', 'openai', 'allam', 'groq'];
+const GROQ_MODELS = ['llama', 'mixtral', 'gemma', 'whisper', 'qwen', 'allam', 'groq'];
+const GEMINI_MODELS = ['gemini'];
 
-const model = process.env.AI_MODEL || 'grok-beta';
+const model = process.env.AI_MODEL || 'gemini-3.5-flash-lite';
+const modelLower = model.toLowerCase();
 
-// Check if the model is a Groq model (Groq also uses an OpenAI-compatible API)
-const isGroqModel = GROQ_MODELS.some(prefix => model.toLowerCase().startsWith(prefix));
+let provider = 'Google Gemini';
+let clientConfig = {
+    apiKey: process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY,
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+};
 
-const aiClient = new OpenAI(
-    isGroqModel
-        ? {
-              apiKey: process.env.GROQ_API_KEY || 'missing_groq_key',
-              baseURL: 'https://api.groq.com/openai/v1',
-          }
-        : {
-              apiKey: process.env.XAI_API_KEY || 'missing_xai_key',
-              baseURL: process.env.XAI_BASE_URL || 'https://api.x.ai/v1',
-          }
-);
+// Check if model explicitly specifies Groq or if Gemini is not configured
+if (GROQ_MODELS.some(prefix => modelLower.startsWith(prefix))) {
+    provider = 'Groq';
+    clientConfig = {
+        apiKey: process.env.GROQ_API_KEY || 'missing_groq_key',
+        baseURL: 'https://api.groq.com/openai/v1',
+    };
+} else if (GEMINI_MODELS.some(prefix => modelLower.startsWith(prefix))) {
+    provider = 'Google Gemini';
+    clientConfig = {
+        apiKey: process.env.GEMINI_API_KEY || 'missing_gemini_key',
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    };
+} else if (modelLower.startsWith('gpt') || process.env.OPENAI_API_KEY) {
+    provider = 'OpenAI';
+    clientConfig = {
+        apiKey: process.env.OPENAI_API_KEY,
+    };
+} else if (process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY) {
+    provider = 'Groq';
+    clientConfig = {
+        apiKey: process.env.GROQ_API_KEY,
+        baseURL: 'https://api.groq.com/openai/v1',
+    };
+}
 
-console.log(`[AI Client] Using provider: ${isGroqModel ? 'Groq' : 'xAI'} | Model: ${model}`);
+const aiClient = new OpenAI(clientConfig);
+
+console.log(`[AI Client] Using provider: ${provider} | Model: ${model}`);
 
 export default aiClient;

@@ -7,19 +7,19 @@ dotenv.config();
 const sendEmail = async (options) => {
   const { email, subject, message, html } = options;
 
-  // Validate required env vars
+  // Validate required Google OAuth2 variables
   if (
-    !process.env.SMTP_USER || 
+    !process.env.GOOGLE_OAUTH_EMAIL || 
     !process.env.GOOGLE_OAUTH_CLIENT_ID || 
     !process.env.GOOGLE_OAUTH_CLIENT_SECRET || 
     !process.env.GOOGLE_OAUTH_REFRESH_TOKEN
   ) {
-    console.log('--- EMAIL MOCK (OAuth2 not fully configured) ---');
+    console.log('--- EMAIL MOCK (Google OAuth2 not fully configured) ---');
     console.log(`To: ${email}`);
     console.log(`Subject: ${subject}`);
     console.log(`Message: ${message}`);
     if (html) console.log(`HTML: ${html}`);
-    console.log('------------------------------------------');
+    console.log('-------------------------------------------------------');
     return;
   }
 
@@ -28,7 +28,7 @@ const sendEmail = async (options) => {
     const oauth2Client = new OAuth2(
       process.env.GOOGLE_OAUTH_CLIENT_ID,
       process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-      "https://developers.google.com/oauthplayground" // Redirect URL
+      "https://developers.google.com/oauthplayground"
     );
 
     oauth2Client.setCredentials({
@@ -44,12 +44,11 @@ const sendEmail = async (options) => {
       });
     });
 
-    // Create transporter
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         type: 'OAuth2',
-        user: process.env.SMTP_USER,
+        user: process.env.GOOGLE_OAUTH_EMAIL,
         accessToken,
         clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
         clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
@@ -58,7 +57,7 @@ const sendEmail = async (options) => {
     });
 
     const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME || 'MediAI'}" <${process.env.SMTP_USER}>`,
+      from: `"${process.env.EMAIL_FROM_NAME || 'MediAI'}" <${process.env.GOOGLE_OAUTH_EMAIL}>`,
       to: email,
       subject,
       text: message,
@@ -66,9 +65,9 @@ const sendEmail = async (options) => {
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email sent via Nodemailer OAuth2: %s', info.messageId);
+    console.log('✅ Email sent via Google OAuth2: %s', info.messageId);
   } catch (err) {
-    console.error('Failed to send email with Nodemailer OAuth2:', err);
+    console.error('Failed to send email with Google OAuth2:', err);
     throw err;
   }
 };
