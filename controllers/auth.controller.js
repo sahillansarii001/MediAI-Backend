@@ -765,15 +765,19 @@ export const login = async (req, res, next) => {
         }
       }
     } else {
-      // Fallback for cases where role is not provided
-      console.log("[Login] No role provided, performing fallback search");
-      user = await User.findOne({ email }).select("+password +adminAccessCode");
-      if (!user) {
-        user = await Doctor.findOne({ email }).select("+password");
-        if (user) {
-          isDoctor = true;
-          user.role = "doctor";
-        }
+      // Fallback for cases where role is not provided - search User and Doctor concurrently
+      console.log("[Login] Performing fast concurrent user and doctor lookup");
+      const [foundUser, foundDoctor] = await Promise.all([
+        User.findOne({ email }).select("+password +adminAccessCode").lean(),
+        Doctor.findOne({ email }).select("+password").lean()
+      ]);
+
+      if (foundUser) {
+        user = await User.hydrate(foundUser);
+      } else if (foundDoctor) {
+        user = await Doctor.hydrate(foundDoctor);
+        isDoctor = true;
+        user.role = "doctor";
       }
     }
 

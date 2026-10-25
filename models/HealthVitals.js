@@ -38,5 +38,7 @@ const healthVitalsSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+healthVitalsSchema.index({ patient: 1, recordedAt: -1 });
+
 const HealthVitals = mongoose.model('HealthVitals', healthVitalsSchema);
 export default HealthVitals;

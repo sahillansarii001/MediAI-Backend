@@ -18,5 +18,7 @@ const medicineReminderSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+medicineReminderSchema.index({ patient: 1, status: 1, updatedAt: -1 });
+
 const MedicineReminder = mongoose.model('MedicineReminder', medicineReminderSchema);
 export default MedicineReminder;

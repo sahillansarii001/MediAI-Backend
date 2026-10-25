@@ -31,7 +31,7 @@ export const getDashboardStats = async (req, res) => {
             totalEmergencies, activeEmergencies, resolvedEmergencies, pendingEmergencies,
             guestEmergencies, patientEmergencies,
             totalAppointments, totalReports, totalSupportTickets,
-            totalRevenueAgg
+            totalRevenueAgg, pendingDoctorApprovals, completedAppointmentsCount
         ] = await Promise.all([
             User.countDocuments(),
             User.countDocuments({ role: 'patient' }),
@@ -49,7 +49,9 @@ export const getDashboardStats = async (req, res) => {
             Transaction.aggregate([
                 { $match: { status: 'completed' } },
                 { $group: { _id: null, total: { $sum: '$amount' } } }
-            ])
+            ]),
+            Doctor.countDocuments({ verificationStatus: 'pending' }),
+            Appointment.countDocuments({ status: 'completed' })
         ]);
 
         const [userTrend, doctorTrend, emergencyTrend, appointmentTrend] = await Promise.all([
@@ -75,6 +77,8 @@ export const getDashboardStats = async (req, res) => {
                 totalAppointments,
                 totalReports,
                 totalSupportTickets,
+                pendingApprovals: pendingDoctorApprovals,
+                completedAppointments: completedAppointmentsCount,
                 revenue: totalRevenueAgg[0]?.total || 0,
                 trends: {
                     users: userTrend,

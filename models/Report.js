@@ -34,5 +34,8 @@ const reportSchema = new mongoose.Schema({
     reportUploads: [{ type: String }] // multiple cloudinary urls
 }, { timestamps: true });
 
+reportSchema.index({ patient: 1, createdAt: -1 });
+reportSchema.index({ doctor: 1, createdAt: -1 });
+
 const Report = mongoose.model('Report', reportSchema);
 export default Report;

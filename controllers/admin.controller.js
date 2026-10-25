@@ -460,6 +460,28 @@ export const getDashboardStats = async (req, res) => {
             revenueTrend = Math.round(((currentRev - previousRev) / previousRev) * 100);
         }
 
+        // Real 7-day registration/appointment trend for admin activity chart
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+
+        const recentAppointments = await Appointment.find({
+            createdAt: { $gte: sevenDaysAgo }
+        }).select('createdAt');
+
+        const daysMap = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const weeklyActivity = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dayStr = daysMap[d.getDay()];
+            const dateStr = d.toISOString().split('T')[0];
+            const count = recentAppointments.filter(a => 
+                new Date(a.createdAt).toISOString().split('T')[0] === dateStr
+            ).length;
+            weeklyActivity.push({ day: dayStr, count });
+        }
+
         res.status(200).json({
             success: true,
             data: {
@@ -469,6 +491,7 @@ export const getDashboardStats = async (req, res) => {
                 reports: reportCount,
                 emergencies: emergencyCount,
                 revenue: totalRevenue[0]?.total || 0,
+                weeklyActivity,
                 uptime: '99.9%',
                 trends: {
                     users: userTrend,
