@@ -107,52 +107,40 @@ export const symptomCheck = async (req, res, next) => {
                 4. When asking a follow-up question, you MUST set 'isAssessmentReady' to false, set 'possibleCondition' to null, and set 'riskLevel' to null.
                 5. ONLY when you have asked at least 4 follow-up questions and collected enough clinical context, or if an urgent red-flag emergency is detected, set 'isAssessmentReady' to true, leave 'followUpQuestion' empty or provide closing remarks, and fill in 'possibleCondition', 'riskLevel', and 'preventionAdvice'.
 
-                QUESTION PRIORITY (For every symptom, gather step-by-step):
-                - Severity (mild, moderate, severe or 1-10)
-                - Duration (when did it start)
-                - Location and type (throbbing, sharp, dull, one-sided)
-                - Associated symptoms (nausea, light sensitivity, fever)
-                - Triggers or recent events (stress, lack of sleep, injury)
+                QUESTION PRIORITY (Ask ONE question at a time in clinical sequence):
+                1. Duration & Onset: When did it begin, and was it sudden or gradual?
+                2. Severity & Quality: Pain scale (1-10) and description (dull, sharp, throbbing, aching)?
+                3. Exact Anatomical Location & Radiation: Where is it felt, and does it spread?
+                4. Associated Systemic Symptoms: Fever, chills, nausea, vomiting, shortness of breath, dizziness?
+                5. Aggravating & Relieving Factors: What makes it better or worse (posture, rest, food)?
 
-                RED FLAG SCREENING:
-                If dangerous symptoms are detected (chest pain, loss of consciousness, sudden severe worst-headache-of-life, stroke signs):
-                - Set riskLevel = High
-                - Set emergencyWarning = "Immediate medical attention required."
-                - Set isAssessmentReady = true immediately.
+                RED FLAG SCREENING (Immediate Emergency Threshold):
+                If dangerous red-flag signs are reported (e.g., crushing substernal chest pressure, sudden severe thunderclap headache, facial droop/arm weakness, hemoptysis, acute dyspnea, anaphylactic airway compromise):
+                - Immediately set isAssessmentReady = true
+                - Set riskLevel = "Critical" or "High"
+                - Set emergencyWarning = "Immediate emergency medical attention required. Please dial emergency services or press the SOS button."
+                - Set followUpQuestion = null
 
-                ASSESSMENT FORMAT:
-                Risk Level:
-                - Low, Medium, High, Critical
+                ASSESSMENT & TRIAGE STANDARDS:
+                - Risk Level: Exactly one of ["Low", "Medium", "High", "Critical"]
+                - Possible Conditions: 1 to 3 non-definitive clinical differentials (e.g. "Probable Viral Upper Respiratory Infection, Acute Sinusitis")
+                - Recommended Specialist: Match from registered specialties on platform: ${specializationsList}
+                - Suggested Prescriptions: List maximum 2-3 common over-the-counter supportive medications (e.g. Acetaminophen/Paracetamol, Saline nasal spray, ORS) ONLY if patient has no known allergies. Never suggest prescription-only antibiotics or controlled substances.
 
-                Possible Conditions:
-                - Show 1-3 possible conditions in possibleCondition (e.g. "Tension Headache, Migraine")
-                - Never claim certainty. Use phrases like "may be" or "could be"
-
-                Recommended Specialist:
-                - Select medically appropriate specialist from available list: ${specializationsList}
-
-                Advice:
-                - Provide safe self-care recommendations in preventionAdvice
-                - Encourage consultation if symptoms persist or worsen
-
-                MEDICATION SAFETY:
-                - Only suggest OTC medication when appropriate (in suggestedPrescriptions).
-                - Before suggesting medication, verify: Age group, Pregnancy status (when relevant), Allergies (if relevant)
-
-                CONFIDENCE RULES:
-                - 4 Questions Answered: Low Confidence
-                - 5 Questions Answered: Medium Confidence
-                - 6 Questions Answered: Higher Confidence
-
-                You must return a JSON response strictly with the following fields:
-                - followUpQuestion (string - your next question to the patient. Leave null/empty ONLY if isAssessmentReady is true)
-                - isAssessmentReady (boolean - false if still asking questions, true ONLY when ready to show final assessment)
-                - possibleCondition (string or null - only when isAssessmentReady is true)
-                - riskLevel (string or null: Low, Medium, High, Critical — only when isAssessmentReady is true)
-                - recommendedSpecialization (string, optional - only when isAssessmentReady is true)
-                - preventionAdvice (string or null - only when isAssessmentReady is true)
-                - emergencyWarning (string, optional - only for High/Critical risk situations)
-                - suggestedPrescriptions (array of objects, max 3 items - only when isAssessmentReady is true)`;
+                OUTPUT FORMAT:
+                You MUST return ONLY a single, valid JSON object with NO preamble or conversational text outside the JSON:
+                {
+                  "followUpQuestion": "string (next intake question) or null if isAssessmentReady is true",
+                  "isAssessmentReady": boolean,
+                  "possibleCondition": "string or null",
+                  "riskLevel": "Low | Medium | High | Critical or null",
+                  "recommendedSpecialization": "string or null",
+                  "preventionAdvice": "string or null",
+                  "emergencyWarning": "string or null",
+                  "suggestedPrescriptions": [
+                    { "name": "string", "dosage": "string", "frequency": "string", "instructions": "string" }
+                  ]
+                }`;
         }
 
         // Build user message — include image for vision analysis if imageUrl provided
@@ -162,8 +150,8 @@ export const symptomCheck = async (req, res, next) => {
                 {
                     type: 'text',
                     text: symptoms
-                        ? `${symptoms}\n\n[Patient has uploaded a medical image for analysis. Please examine the image carefully for visible symptoms such as swelling, redness, rash, wound, skin infection, or allergic reaction, and incorporate your visual findings into your assessment.]`
-                        : '[Patient has uploaded a medical image for analysis. Please examine the image carefully for visible symptoms such as swelling, redness, rash, wound, skin infection, or allergic reaction, and provide your assessment.]'
+                        ? `${symptoms}\n\n[Clinical Inspection Context: Patient uploaded a medical image. Examine carefully for visible signs of swelling, erythema, rash, laceration, infection, or discoloration and synthesize observations.]`
+                        : '[Clinical Inspection Context: Patient uploaded a medical image. Examine carefully for visible signs of swelling, erythema, rash, laceration, infection, or discoloration and synthesize observations.]'
                 },
                 {
                     type: 'image_url',
@@ -180,18 +168,18 @@ export const symptomCheck = async (req, res, next) => {
             { role: 'user', content: userContent }
         ];
 
+        // Determine active AI configuration (Google Gemini or Groq)
+        const { getAIProviderConfig } = await import('../utils/aiClient.js');
+        const activeAI = getAIProviderConfig();
 
-        let modelToUse = process.env.AI_MODEL || 'grok-beta';
-        let clientToUse = aiClient;
+        let modelToUse = activeAI.model;
+        let clientToUse = activeAI.client;
 
         if (imageUrl) {
-            const groqPrefixes = ['llama', 'mixtral', 'gemma', 'whisper', 'qwen', 'openai', 'allam', 'groq'];
-            const isGroq = groqPrefixes.some(p => modelToUse.toLowerCase().startsWith(p));
-            if (isGroq) {
-                // Groq decommissioned Llama 3.2 vision. The active vision model is qwen/qwen3.6-27b
-                modelToUse = 'qwen/qwen3.6-27b'; 
+            if (activeAI.provider === 'Google Gemini') {
+                modelToUse = 'gemini-3.5-flash-lite';
             } else {
-                modelToUse = 'grok-2-vision-1212'; // xAI vision model
+                modelToUse = 'qwen/qwen3.8-27b';
             }
         }
 
@@ -203,18 +191,43 @@ export const symptomCheck = async (req, res, next) => {
                 response_format: { type: 'json_object' }
             });
         } catch (initialError) {
-            if ((initialError.status === 404 || initialError.status === 400) && !imageUrl) {
-                console.warn(`Model ${modelToUse} failed with ${initialError.status}. Falling back to openai/gpt-oss-120b...`);
+            console.warn(`[AI Engine] ${activeAI.provider} model ${modelToUse} failed:`, initialError.message || initialError);
+            
+            // Automatic failover between primary model and fallback model
+            try {
+                const fallbackModel = activeAI.fallbackModel || (activeAI.provider === 'Groq' ? 'allam-2-7b' : 'gemini-3.8-flash');
+                console.log(`[AI Engine] Retrying with failover model: ${fallbackModel}...`);
                 response = await clientToUse.chat.completions.create({
-                    model: 'openai/gpt-oss-120b',
-                    messages
+                    model: fallbackModel,
+                    messages,
+                    response_format: { type: 'json_object' }
                 });
-            } else {
-                throw initialError;
+            } catch (fallbackError) {
+                // If primary provider completely failed, attempt alternate provider (Gemini <-> Groq)
+                const alternateProvider = activeAI.provider === 'Google Gemini' ? 'qwen/qwen3.8-27b' : 'gemini-3.5-flash-lite';
+                const altAI = getAIProviderConfig(alternateProvider);
+                console.log(`[AI Engine] Switching provider to ${altAI.provider} (${altAI.model})...`);
+                response = await altAI.client.chat.completions.create({
+                    model: altAI.model,
+                    messages,
+                    response_format: { type: 'json_object' }
+                });
             }
         }
 
-        const aiResponse = JSON.parse(response.choices[0].message.content);
+        let aiResponse;
+        try {
+            const rawText = response.choices[0].message.content.trim();
+            // Handle cases where model wraps JSON in markdown fences
+            const cleanJson = rawText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+            aiResponse = JSON.parse(cleanJson);
+        } catch (parseErr) {
+            console.error('[AI Engine] Failed to parse model JSON output:', parseErr);
+            aiResponse = {
+                followUpQuestion: "Could you describe where and when you first noticed these symptoms?",
+                isAssessmentReady: false
+            };
+        }
 
         // Safety enforcement: If user has had fewer than 4 exchanges in assessment mode,
         // and no emergency warning is flagged, ensure we stay in questioning mode.
