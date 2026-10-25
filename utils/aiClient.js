@@ -28,11 +28,6 @@ if (GROQ_MODELS.some(prefix => modelLower.startsWith(prefix))) {
         apiKey: process.env.GEMINI_API_KEY || 'missing_gemini_key',
         baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
     };
-} else if (modelLower.startsWith('gpt') || process.env.OPENAI_API_KEY) {
-    provider = 'OpenAI';
-    clientConfig = {
-        apiKey: process.env.OPENAI_API_KEY,
-    };
 } else if (process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY) {
     provider = 'Groq';
     clientConfig = {
