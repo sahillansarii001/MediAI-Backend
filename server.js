@@ -109,6 +109,18 @@ io.on('connection', (socket) => {
         socket.to(data.to).emit('callEnded');
     });
 
+    socket.on('typing', (data) => {
+        if (data && data.chatId) {
+            socket.to(`chat_${data.chatId}`).emit('typing', data);
+        }
+    });
+
+    socket.on('stopTyping', (data) => {
+        if (data && data.chatId) {
+            socket.to(`chat_${data.chatId}`).emit('stopTyping', data);
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log(`[Socket] Disconnected socketId: ${socket.id}`);
         // Notify others in rooms that this user disconnected (optional, for handling abrupt drops)

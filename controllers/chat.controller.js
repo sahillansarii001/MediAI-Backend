@@ -124,6 +124,7 @@ export const sendMessage = async (req, res, next) => {
                     content: savedMessage.content,
                     imageUrl: savedMessage.imageUrl,
                     timestamp: savedMessage.timestamp,
+                    status: savedMessage.status || 'delivered',
                     _id: savedMessage._id
                 }
             });
@@ -145,6 +146,28 @@ export const getChat = async (req, res, next) => {
             .populate('doctor', 'fullName specialization onlineStatus breakExpiresAt dailyBreak');
 
         if (!chat) return res.status(404).json({ success: false, message: 'Chat not found' });
+
+        // Mark incoming messages from the other user as 'seen'
+        const currentModel = req.user.role === 'doctor' ? 'Doctor' : 'User';
+        let hasSeenUpdates = false;
+        chat.messages.forEach(m => {
+            if (m.senderModel !== currentModel && m.status !== 'seen') {
+                m.status = 'seen';
+                hasSeenUpdates = true;
+            }
+        });
+
+        if (hasSeenUpdates) {
+            await chat.save();
+            const io = req.app.get('io');
+            if (io) {
+                io.to(`chat_${chat._id}`).emit('messagesSeen', {
+                    chatId: chat._id,
+                    seenBy: req.user._id,
+                    seenByModel: currentModel
+                });
+            }
+        }
 
         const chatObj = chat.toObject();
         if (chatObj.doctor) {
