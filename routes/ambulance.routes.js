@@ -7,13 +7,13 @@ const router = express.Router();
 
 router.use(protect);
 
-// Admin routes (add, edit, delete)
+// Admin / Hospital routes (add, edit, delete)
 router.route('/')
     .get(authorize('admin', 'super_admin'), getAmbulances)
-    .post(authorize('admin'), addAmbulance);
+    .post(authorize('admin', 'super_admin'), addAmbulance);
 
 router.route('/:id')
-    .put(authorize('admin'), updateAmbulance)
-    .delete(authorize('admin'), deleteAmbulance);
+    .put(authorize('admin', 'super_admin'), updateAmbulance)
+    .delete(authorize('admin', 'super_admin'), deleteAmbulance);
 
 export default router;

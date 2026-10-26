@@ -636,3 +636,50 @@ export const updatePlatformSettings = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// ==========================================
+// HOSPITAL VERIFICATION (Admin approval)
+// ==========================================
+
+export const verifyHospital = async (req, res) => {
+    try {
+        const { status, rejectionReason } = req.body; // 'approved' or 'rejected'
+
+        if (!status || !['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status. Must be "approved" or "rejected".' });
+        }
+
+        const updateData = {
+            verificationStatus: status,
+            isVerified: status === 'approved',
+            isActive: status === 'approved'
+        };
+
+        const hospital = await User.findOneAndUpdate(
+            { _id: req.params.id, role: 'admin' },
+            { $set: updateData },
+            { new: true, runValidators: false }
+        ).select('-password');
+
+        if (!hospital) {
+            return res.status(404).json({ success: false, message: 'Hospital account not found' });
+        }
+
+        await createAuditLog({
+            action: status === 'approved' ? 'HOSPITAL_APPROVED' : 'HOSPITAL_REJECTED',
+            req,
+            target: 'User',
+            targetId: hospital._id,
+            details: { email: hospital.email, hospitalName: hospital.hospitalName || hospital.fullName, status, rejectionReason }
+        });
+
+        res.status(200).json({
+            success: true,
+            message: `Hospital ${status} successfully`,
+            data: hospital
+        });
+    } catch (error) {
+        console.error('verifyHospital error:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

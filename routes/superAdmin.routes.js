@@ -1,7 +1,7 @@
 import express from 'express';
 import {
     getDashboardStats,
-    getAllAdmins, createAdmin, updateAdmin, suspendAdmin, deleteAdmin,
+    getAllAdmins, createAdmin, updateAdmin, suspendAdmin, deleteAdmin, verifyHospital,
     getAllEmergencies, getEmergencyById, assignEmergency, updateEmergencyStatusSA, deleteEmergency,
     getAllPlatformUsers, getAllDoctors, getAllAppointments, getAllSupportTickets, getAllAuditLogs,
     getAnalytics,
@@ -28,6 +28,8 @@ router.route('/admins/:id')
     .put(updateAdmin)
     .delete(deleteAdmin);
 router.patch('/admins/:id/suspend', suspendAdmin);
+router.put('/admins/:id/verify', verifyHospital);
+router.patch('/admins/:id/verify', verifyHospital);
 router.get('/admins/:id/stats', getAdminStats);
 
 // Emergency Control Center

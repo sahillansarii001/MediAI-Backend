@@ -1,7 +1,7 @@
 import express from 'express';
 import { 
     getAllUsers, addUser, editUser, deleteUser, toggleUserStatus,
-    getAllDoctors, getPendingDoctors, verifyDoctor, editDoctor, deleteDoctor,
+    getAllDoctors, addDoctor, getPendingDoctors, verifyDoctor, editDoctor, deleteDoctor,
     getAllAppointments, getAllReports, getAllEmergencies, updateEmergencyStatus, archiveEmergency, getDashboardStats,
     getAllTransactions, addTransaction, updateTransactionStatus, deleteTransaction, getAllAuditLogs
 } from '../controllers/admin.controller.js';
@@ -28,7 +28,8 @@ router.put('/users/:id/status', toggleUserStatus);
 
 // Doctor routes
 router.route('/doctors')
-    .get(getAllDoctors);
+    .get(getAllDoctors)
+    .post(addDoctor);
 router.route('/doctors/pending')
     .get(getPendingDoctors);
 router.put('/doctors/:id/verify', verifyDoctor);

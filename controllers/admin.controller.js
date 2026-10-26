@@ -175,8 +175,54 @@ export const getPendingDoctors = async (req, res) => {
     }
 };
 
+// Add Doctor (Hospital can add their doctors, created in pending status awaiting admin approval)
+export const addDoctor = async (req, res) => {
+    try {
+        const { fullName, email, password, specialization, licenseNumber, yearsOfExperience, clinicAddress, phone, hospitalName } = req.body;
+
+        if (!fullName || !email || !password || !specialization || !licenseNumber) {
+            return res.status(400).json({ success: false, message: 'Full name, email, password, specialization, and license number are required' });
+        }
+
+        const existingDoc = await Doctor.findOne({ email: email.toLowerCase() });
+        const existingUser = await User.findOne({ email: email.toLowerCase() });
+        if (existingDoc || existingUser) {
+            return res.status(400).json({ success: false, message: 'Email already registered' });
+        }
+
+        const hospitalVal = hospitalName || req.user.hospitalName || req.user.fullName || 'Hospital';
+
+        const doctor = await Doctor.create({
+            fullName,
+            email: email.toLowerCase(),
+            password,
+            specialization,
+            licenseNumber,
+            yearsOfExperience: Number(yearsOfExperience) || 1,
+            clinicAddress: clinicAddress || 'Hospital Clinic',
+            hospitalName: hospitalVal,
+            phone: phone || '',
+            verificationStatus: 'pending',
+            accountStatus: 'active'
+        });
+
+        const docObj = doctor.toObject();
+        delete docObj.password;
+
+        res.status(201).json({ success: true, data: docObj, message: 'Doctor added successfully. Awaiting Admin verification.' });
+    } catch (error) {
+        console.error('addDoctor error:', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 export const verifyDoctor = async (req, res) => {
     try {
+        // Enforce that only platform super_admin (Admin) can approve/reject doctor verification
+        if (req.user.role !== 'super_admin') {
+            return res.status(403).json({ success: false, message: 'Only Platform Admin is authorized to verify doctors' });
+        }
+
         console.log('verifyDoctor called with ID:', req.params.id);
         console.log('Request body:', req.body);
 
