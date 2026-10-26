@@ -182,5 +182,70 @@ server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
+// Periodic Video Call Reminder Job (Checks every 30 seconds)
+setInterval(async () => {
+    try {
+        const Chat = (await import('./models/Chat.js')).default;
+        const Notification = (await import('./models/Notification.js')).default;
+        
+        const now = new Date();
+        const tenMinutesFromNow = new Date(now.getTime() + 10 * 60 * 1000);
+
+        // Find chats with scheduled video calls whose target time is coming up (within 10 mins or due now) and reminder not yet sent
+        const upcomingChats = await Chat.find({
+            features: 'video',
+            status: { $in: ['active', 'requested', 'rescheduled'] },
+            reminderSent: false,
+            $or: [
+                { doctorCallTime: { $lte: tenMinutesFromNow, $gte: new Date(now.getTime() - 30 * 60 * 1000) } },
+                { patientScheduledTime: { $lte: tenMinutesFromNow, $gte: new Date(now.getTime() - 30 * 60 * 1000) } }
+            ]
+        }).populate('patient', 'fullName').populate('doctor', 'fullName');
+
+        for (const chat of upcomingChats) {
+            chat.reminderSent = true;
+            await chat.save();
+
+            const targetTime = chat.doctorCallTime || chat.patientScheduledTime;
+            const timeStr = new Date(targetTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Notify Doctor
+            await Notification.create({
+                recipient: chat.doctor._id,
+                recipientModel: 'Doctor',
+                type: 'appointment_update',
+                title: 'Video Call Reminder',
+                message: `Reminder: You have a scheduled video call with ${chat.patient?.fullName || 'Patient'} around ${timeStr}.`,
+                route: `/doctor/video-call?chatId=${chat._id}&isVideo=true`
+            });
+
+            // Notify Patient
+            await Notification.create({
+                recipient: chat.patient._id,
+                recipientModel: 'User',
+                type: 'appointment_update',
+                title: 'Video Call Reminder',
+                message: `Reminder: Your video consultation with Dr. ${chat.doctor?.fullName || 'Doctor'} is scheduled for ${timeStr}.`,
+                route: `/patient/video-call?chatId=${chat._id}&isVideo=true`
+            });
+
+            // Emit live socket reminder
+            io.to(`doctor_${chat.doctor._id}`).emit('videoCallReminder', {
+                chatId: chat._id,
+                patientName: chat.patient?.fullName,
+                timeStr
+            });
+            io.to(`patient_${chat.patient._id}`).emit('videoCallReminder', {
+                chatId: chat._id,
+                doctorName: chat.doctor?.fullName,
+                timeStr
+            });
+            console.log(`[Video Call Reminder] Sent reminder for Chat ${chat._id} scheduled at ${timeStr}`);
+        }
+    } catch (reminderErr) {
+        // Silently capture errors so the server interval doesn't break
+    }
+}, 30000);
+
  
  

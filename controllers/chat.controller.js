@@ -302,9 +302,9 @@ export const endConsultation = async (req, res, next) => {
 // @access  Private (Patient)
 export const requestConsultation = async (req, res, next) => {
     try {
-        const { doctorId, resume, mode, features } = req.body;
+        const { doctorId, resume, mode, features, callScheduleType, scheduledTime } = req.body;
         const requestedFeatures = features || (mode ? [mode] : ['chat']);
-        console.log(`[Chat Request] Patient clicked Start Chat: Patient ${req.user._id} with Doctor ${doctorId}, resume: ${resume}, features: ${requestedFeatures}`);
+        console.log(`[Chat Request] Patient clicked Start Chat: Patient ${req.user._id} with Doctor ${doctorId}, resume: ${resume}, features: ${requestedFeatures}, scheduleType: ${callScheduleType}`);
 
         // If resuming, check for an existing active chat first
         if (resume) {
@@ -341,8 +341,14 @@ export const requestConsultation = async (req, res, next) => {
             status: 'requested',
             features: requestedFeatures,
             paymentStatus: 'pending',
+            callScheduleType: callScheduleType || 'now',
             messages: []
         };
+
+        if (scheduledTime) {
+            chatData.patientScheduledTime = new Date(scheduledTime);
+            chatData.scheduledTime = new Date(scheduledTime).toLocaleString();
+        }
         
         if (activeAppointment) {
             chatData.appointment = activeAppointment._id;
@@ -351,6 +357,20 @@ export const requestConsultation = async (req, res, next) => {
         const chat = await Chat.create(chatData);
 
         console.log(`[Chat Request] Chat request created with chatId: ${chat._id}`);
+
+        // If patient scheduled the call for later, also create a notification for the doctor
+        const Notification = (await import('../models/Notification.js')).default;
+        if (callScheduleType === 'scheduled' && scheduledTime) {
+            const formattedTime = new Date(scheduledTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+            await Notification.create({
+                recipient: doctorId,
+                recipientModel: 'Doctor',
+                type: 'appointment_update',
+                title: 'New Video Call Scheduled',
+                message: `${req.user.fullName || 'A Patient'} scheduled a video call consultation for ${formattedTime}.`,
+                route: '/doctor/appointments'
+            });
+        }
 
         // Immediately emit newChatRequest to the doctor room
         const populatedChat = await Chat.findById(chat._id).populate('patient', 'fullName');
@@ -374,7 +394,7 @@ export const requestConsultation = async (req, res, next) => {
 // @access  Private (Doctor)
 export const respondToConsultation = async (req, res, next) => {
     try {
-        const { status, scheduledTime } = req.body; // status: 'active' or 'rescheduled'
+        const { status, scheduledTime, doctorCallTime } = req.body; // status: 'active' or 'rescheduled'
         console.log(`[Chat Respond] Doctor ${req.user._id} responding to Chat ${req.params.id} with status: ${status}`);
         
         const chat = await Chat.findById(req.params.id);
@@ -386,6 +406,10 @@ export const respondToConsultation = async (req, res, next) => {
 
         chat.status = status;
         if (scheduledTime) chat.scheduledTime = scheduledTime;
+        if (doctorCallTime) {
+            chat.doctorCallTime = new Date(doctorCallTime);
+            chat.scheduledTime = new Date(doctorCallTime).toLocaleString();
+        }
         await chat.save();
 
         // Broadcast status change to all connected clients in real-time
@@ -428,21 +452,30 @@ export const respondToConsultation = async (req, res, next) => {
             );
         }
 
-        // If rescheduled, create a notification for the patient
+        // Notifications
+        const Notification = (await import('../models/Notification.js')).default;
         if (status === 'rescheduled') {
             console.log(`[Chat Respond] Chat was rescheduled. Creating patient notification...`);
-            const Notification = (await import('../models/Notification.js')).default;
-            
             await Notification.create({
                 recipient: chat.patient,
                 recipientModel: 'User',
                 type: 'appointment_update',
                 title: 'Consultation Rescheduled',
-                message: `Dr. ${req.user.fullName} is busy and has rescheduled your consultation for ${scheduledTime}.`,
+                message: `Dr. ${req.user.fullName} has scheduled your consultation for ${chat.scheduledTime || scheduledTime}.`,
                 route: '/patient/appointments',
                 relatedId: chat.appointment || undefined
             });
             console.log(`[Chat Respond] Notification created successfully.`);
+        } else if (status === 'active' && doctorCallTime) {
+            const formattedTime = new Date(doctorCallTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+            await Notification.create({
+                recipient: chat.patient,
+                recipientModel: 'User',
+                type: 'appointment_update',
+                title: 'Doctor Set Call Time',
+                message: `Dr. ${req.user.fullName} accepted your video consultation and scheduled the call for ${formattedTime}.`,
+                route: '/patient/appointments'
+            });
         }
 
         res.status(200).json({ success: true, data: chat });

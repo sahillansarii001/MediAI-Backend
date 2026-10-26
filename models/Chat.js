@@ -69,6 +69,21 @@ const chatSchema = new mongoose.Schema({
     scheduledTime: {
         type: String // For rescheduling
     },
+    callScheduleType: {
+        type: String,
+        enum: ['now', 'scheduled'],
+        default: 'now'
+    },
+    patientScheduledTime: {
+        type: Date
+    },
+    doctorCallTime: {
+        type: Date
+    },
+    reminderSent: {
+        type: Boolean,
+        default: false
+    },
     aiReport: {
         complaint: { type: String },
         symptoms: { type: String },
