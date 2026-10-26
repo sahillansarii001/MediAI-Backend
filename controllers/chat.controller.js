@@ -62,6 +62,11 @@ export const sendMessage = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Chat has ended' });
         }
 
+        // Auto-activate requested or accepted chats when sending messages
+        if (chat.status === 'requested' || chat.status === 'accepted' || chat.status === 'doctor-requested') {
+            chat.status = 'active';
+        }
+
         // Message guards for patients
         if (req.user.role !== 'doctor') {
             const doctorDoc = await Doctor.findById(chat.doctor);
@@ -76,28 +81,17 @@ export const sendMessage = async (req, res, next) => {
                     });
                 }
 
-                // Guard 2: Doctor is busy in another consultation
-                if (chat.status !== 'active') {
-                    const activeChatForDoc = await Chat.findOne({ doctor: chat.doctor, status: 'active' });
-                    if (activeChatForDoc && activeChatForDoc._id.toString() !== chat._id.toString()) {
-                        return res.status(400).json({
-                            success: false,
-                            message: `Dr. ${doctorDoc.fullName} is busy in another consultation. Message sending is temporarily paused.`
-                        });
+                // Guard 2: Auto-heal other stale active sessions for this doctor
+                await Chat.updateMany(
+                    {
+                        doctor: chat.doctor,
+                        _id: { $ne: chat._id },
+                        status: 'active'
+                    },
+                    {
+                        $set: { status: 'ended' }
                     }
-                } else {
-                    // Active session - auto-heal database by ending any other active chats for this doctor
-                    await Chat.updateMany(
-                        {
-                            doctor: chat.doctor,
-                            _id: { $ne: chat._id },
-                            status: 'active'
-                        },
-                        {
-                            $set: { status: 'ended' }
-                        }
-                    );
-                }
+                );
             }
         }
 
